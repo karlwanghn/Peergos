@@ -437,6 +437,7 @@ public class Main extends Builder {
             Supplier<Connection> usageDb = getDBConnector(a, "space-usage-sql-file", dbConnectionPool);
             UsageStore usageStore = new JdbcUsageStore(usageDb, sqlCommands);
             JdbcIpnsAndSocial rawSocial = new JdbcIpnsAndSocial(getDBConnector(a, "social-sql-file"), sqlCommands);
+            HttpSpaceUsage httpSpaceUsage = new HttpSpaceUsage(p2pHttpProxy, p2pHttpProxy);
 
             CoreNode core = buildCorenode(a, localStorage, transactions, rawPointers, localPointers, proxingMutable,
                     rawSocial, hasher);
@@ -444,7 +445,7 @@ public class Main extends Builder {
             QuotaAdmin userQuotas = buildSpaceQuotas(a, localStorage, core,
                     getDBConnector(a, "space-requests-sql-file", dbConnectionPool),
                     getDBConnector(a, "quotas-sql-file", dbConnectionPool));
-            CoreNode signupFilter = new SignUpFilter(core, userQuotas, nodeId);
+            CoreNode signupFilter = new SignUpFilter(core, userQuotas, nodeId, userQuotas, httpSpaceUsage);
 
             SpaceCheckingKeyFilter.update(usageStore, userQuotas, core, localPointers, localStorage, hasher);
             SpaceCheckingKeyFilter spaceChecker = new SpaceCheckingKeyFilter(core, localPointers, localStorage,
@@ -473,7 +474,6 @@ public class Main extends Builder {
                     .collect(Collectors.toSet());
             boolean enableWaitlist = a.getBoolean("enable-wait-list", false);
             Admin storageAdmin = new Admin(adminUsernames, userQuotas, core, localStorage, enableWaitlist);
-            HttpSpaceUsage httpSpaceUsage = new HttpSpaceUsage(p2pHttpProxy, p2pHttpProxy);
             ProxyingSpaceUsage p2pSpaceUsage = new ProxyingSpaceUsage(nodeId, corePropagator, spaceChecker, httpSpaceUsage);
             UserService peergos = new UserService(p2pDht, crypto, corePropagator, p2pSocial, p2mMutable, storageAdmin,
                     p2pSpaceUsage, new ServerMessageStore(getDBConnector(a, "server-messages-sql-file", dbConnectionPool),
@@ -644,13 +644,9 @@ public class Main extends Builder {
             TransactionStore transactions = buildTransactionStore(a, dbConnectionPool);
             DeletableContentAddressedStorage localStorage = buildLocalStorage(a, transactions);
 
-            QuotaAdmin userQuotas = buildSpaceQuotas(a, localStorage, network.coreNode,
-                    getDBConnector(a, "space-requests-sql-file", dbConnectionPool),
-                    getDBConnector(a, "quotas-sql-file", dbConnectionPool));
-
             UserContext user = UserContext.signIn(username, password, network, crypto).join();
 
-            Migrate.migrateToLocal(user, localStorage, userQuotas, network);
+            Migrate.migrateToLocal(user, localStorage, network);
             return true;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
